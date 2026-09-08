@@ -1,7 +1,7 @@
 # API reference
 
 ```go
-import "github.com/Mitsuwa/cidrgen2"
+import "github.com/Mitsuwa/cidrgen"
 ```
 
 Package `cidrgen`. IPv4 only.

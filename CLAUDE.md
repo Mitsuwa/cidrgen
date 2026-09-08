@@ -1,7 +1,7 @@
 # cidrgen — working agreement
 
 `cidrgen` allocates non-overlapping IPv4 CIDR blocks from a parent pool. It is a
-single Go package (`github.com/Mitsuwa/cidrgen2`), no CLI, no subpackages.
+single Go package (`github.com/Mitsuwa/cidrgen`), no CLI, no subpackages.
 
 ## The rule for every change
 
