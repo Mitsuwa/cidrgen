@@ -59,6 +59,10 @@ From [CLAUDE.md](../CLAUDE.md):
 - `TestFirstFitSequential` carves a `/16` into 256 `/24`s one at a time, feeding
   each result back, and checks the invariant on every iteration — the closest
   thing to a property test without adding a dependency.
+- `TestGenerateMixedSizeSequence` drives one `Generator` through an ordered mix
+  of `/16`–`/32` requests (and classifications), feeding each result back into
+  `Allocated`, and asserts the exact block returned at every step plus the
+  `assertFits` invariant.
 
 ## CI
 

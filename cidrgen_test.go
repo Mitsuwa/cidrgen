@@ -422,3 +422,205 @@ func TestGeneratorConcurrent(t *testing.T) {
 		assertFits(t, g.parent, mustPrefixes(t, reqs[r.idx].Allocated...), r.got)
 	}
 }
+
+// step is one Generate call within a TestGenerateMixedSizeSequence row. netmask
+// or classification names the requested size (mirroring Request); want is the
+// canonical CIDR the call must return, or wantErr the sentinel it must match.
+type step struct {
+	netmask        int
+	classification string
+	want           string
+	wantErr        error
+}
+
+// TestGenerateMixedSizeSequence drives one Generator through an ordered mix of
+// differently sized requests, feeding each result back into Request.Allocated,
+// and checks the exact block returned at every step. Each success step also
+// asserts the assertFits invariant, that no address is handed out twice across
+// the row, and — for classification steps — that the block is the mapped size.
+//
+// A row's seed entries stay in Request.Allocated for every step. They are
+// written with host bits set (e.g. "10.0.0.5/25"), so the rows that use them
+// also verify the Generator canonicalizes each Allocated entry with Masked()
+// before the overlap scan: the expected sequences are those of the masked
+// forms, and a Generator that scanned the raw addresses would return different
+// blocks (or ErrNoSpace).
+//
+// The expected sequences are traced through firstFit (first-fit, lowest
+// address, re-aligned up to the block size past each allocation); a wrong value
+// here is a table bug, not an algorithm bug.
+func TestGenerateMixedSizeSequence(t *testing.T) {
+	classes := map[string]int{"region": 16, "zone": 24, "host": 32}
+
+	tests := []struct {
+		name    string
+		parent  string
+		classes map[string]int
+		seed    []string // host-bit-set entries kept in Allocated for every step
+		steps   []step
+	}{
+		{
+			name:   "netmask mix under a /8 re-aligns a later /16 past an early /32",
+			parent: "10.0.0.0/8",
+			steps: []step{
+				{netmask: 32, want: "10.0.0.0/32"},
+				{netmask: 16, want: "10.1.0.0/16"},
+				{netmask: 24, want: "10.0.1.0/24"},
+				{netmask: 32, want: "10.0.0.1/32"},
+				{netmask: 16, want: "10.2.0.0/16"},
+			},
+		},
+		{
+			name:    "classification mix under a /8",
+			parent:  "100.0.0.0/8",
+			classes: classes,
+			steps: []step{
+				{classification: "host", want: "100.0.0.0/32"},
+				{classification: "region", want: "100.1.0.0/16"},
+				{classification: "zone", want: "100.0.1.0/24"},
+				{classification: "host", want: "100.0.0.1/32"},
+				{classification: "region", want: "100.2.0.0/16"},
+			},
+		},
+		{
+			name:    "netmask and classification steps interleaved through one Generator",
+			parent:  "10.0.0.0/8",
+			classes: classes,
+			steps: []step{
+				{classification: "zone", want: "10.0.0.0/24"},
+				{netmask: 32, want: "10.0.1.0/32"},
+				{classification: "region", want: "10.1.0.0/16"},
+				{netmask: 24, want: "10.0.2.0/24"},
+				{classification: "host", want: "10.0.1.1/32"},
+			},
+		},
+		{
+			name:   "/24 and /32 packing under a tight /16 parent",
+			parent: "10.0.0.0/16",
+			steps: []step{
+				{netmask: 24, want: "10.0.0.0/24"},
+				{netmask: 32, want: "10.0.1.0/32"},
+				{netmask: 24, want: "10.0.2.0/24"},
+				{netmask: 32, want: "10.0.1.1/32"},
+				{netmask: 24, want: "10.0.3.0/24"},
+			},
+		},
+		{
+			name:   "sequence fills a /24 exactly then a /32 no longer fits",
+			parent: "10.0.0.0/24",
+			steps: []step{
+				{netmask: 25, want: "10.0.0.0/25"},
+				{netmask: 26, want: "10.0.0.128/26"},
+				{netmask: 26, want: "10.0.0.192/26"},
+				{netmask: 32, wantErr: ErrNoSpace},
+			},
+		},
+		{
+			name:   "whole address space: /1, /32, /2",
+			parent: "0.0.0.0/0",
+			steps: []step{
+				{netmask: 1, want: "0.0.0.0/1"},
+				{netmask: 32, want: "128.0.0.0/32"},
+				{netmask: 2, want: "192.0.0.0/2"},
+			},
+		},
+		{
+			name:   "whole address space: /4 and /10 interleaved",
+			parent: "0.0.0.0/0",
+			steps: []step{
+				{netmask: 4, want: "0.0.0.0/4"},
+				{netmask: 10, want: "16.0.0.0/10"},
+				{netmask: 4, want: "32.0.0.0/4"},
+				{netmask: 10, want: "16.64.0.0/10"},
+			},
+		},
+		{
+			name:   "whole address space: /10, /4, /2, /32",
+			parent: "0.0.0.0/0",
+			steps: []step{
+				{netmask: 10, want: "0.0.0.0/10"},
+				{netmask: 4, want: "16.0.0.0/4"},
+				{netmask: 2, want: "64.0.0.0/2"},
+				{netmask: 32, want: "0.64.0.0/32"},
+			},
+		},
+		{
+			// The seed masks to 10.0.0.0/25 = [0,127]. A Generator that scanned
+			// the raw 10.0.0.5/25 would treat it as [5,132] and answer
+			// 10.0.0.192/26 on the first step.
+			name:   "host-bit seed masked to the block it occupies, then exhaustion",
+			parent: "10.0.0.0/24",
+			seed:   []string{"10.0.0.5/25"},
+			steps: []step{
+				{netmask: 26, want: "10.0.0.128/26"},
+				{netmask: 26, want: "10.0.0.192/26"},
+				{netmask: 25, wantErr: ErrNoSpace},
+			},
+		},
+		{
+			// Host bits set in the parent and in both seeds. Masked forms:
+			// parent 10.0.0.0/8, seeds 10.0.0.0/24 and 10.1.0.0/16.
+			name:   "host bits in the parent and the seeds under a /8",
+			parent: "10.1.2.3/8",
+			seed:   []string{"10.0.0.200/24", "10.1.50.99/16"},
+			steps: []step{
+				{netmask: 24, want: "10.0.1.0/24"},
+				{netmask: 16, want: "10.2.0.0/16"},
+				{netmask: 32, want: "10.0.2.0/32"},
+			},
+		},
+		{
+			// Host-bit seed (masks to 100.0.0.0/24) with classification steps.
+			name:    "host-bit seed with classification steps",
+			parent:  "100.0.0.0/8",
+			classes: classes,
+			seed:    []string{"100.0.0.77/24"},
+			steps: []step{
+				{classification: "zone", want: "100.0.1.0/24"},
+				{classification: "host", want: "100.0.2.0/32"},
+				{classification: "region", want: "100.1.0.0/16"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g, err := New(tt.parent, tt.classes)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+
+			allocated := append([]string(nil), tt.seed...)
+			seen := map[string]bool{}
+			for i, s := range tt.steps {
+				got, err := g.Generate(Request{
+					Allocated:      allocated,
+					Netmask:        s.netmask,
+					Classification: s.classification,
+				})
+				if s.wantErr != nil {
+					if !errors.Is(err, s.wantErr) {
+						t.Fatalf("step %d: error = %v, want %v", i, err, s.wantErr)
+					}
+					break // an error step is always last in a row
+				}
+				if err != nil {
+					t.Fatalf("step %d: unexpected error: %v", i, err)
+				}
+				if got.String() != s.want {
+					t.Fatalf("step %d: Generate = %s, want %s", i, got, s.want)
+				}
+				assertFits(t, g.parent, mustPrefixes(t, allocated...), got)
+				if s.classification != "" && got.Bits() != tt.classes[s.classification] {
+					t.Fatalf("step %d: got /%d, want /%d for %q",
+						i, got.Bits(), tt.classes[s.classification], s.classification)
+				}
+				if seen[got.String()] {
+					t.Fatalf("step %d: %s allocated twice", i, got)
+				}
+				seen[got.String()] = true
+				allocated = append(allocated, got.String())
+			}
+		})
+	}
+}
