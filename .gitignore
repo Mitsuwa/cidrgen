@@ -1,0 +1,9 @@
+# Build & test artifacts
+/bin/
+*.out
+*.test
+coverage.*
+
+# Scratch
+/main.go
+/scratch/
