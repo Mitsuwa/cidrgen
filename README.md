@@ -2,17 +2,17 @@
 
 Allocate non-overlapping IPv4 CIDR blocks from a parent pool.
 
-Given a parent CIDR and the blocks already carved out of it, `Generate` returns
-the lowest-address, correctly-aligned free block of a requested size. The size is
-given directly as a prefix length, or indirectly through a *classification* name
-that maps to one.
+Create a `Generator` for a parent CIDR, then, given the blocks already carved out
+of it, `Generate` returns the lowest-address, correctly-aligned free block of a
+requested size. The size is given directly as a prefix length, or indirectly
+through a *classification* name that maps to one.
 
 ```go
 import "github.com/Mitsuwa/cidrgen2"
 
 // Explicit size.
-p, err := cidrgen.Generate(cidrgen.Request{
-    Parent:    "10.0.0.0/16",
+g, err := cidrgen.New("10.0.0.0/16", nil)
+p, err := g.Generate(cidrgen.Request{
     Allocated: []string{"10.0.0.0/24", "10.0.2.0/24"},
     Netmask:   24,
 })
@@ -20,11 +20,10 @@ p, err := cidrgen.Generate(cidrgen.Request{
 
 // Size by classification.
 classes := map[string]int{"datanode": 28, "computenode": 27}
-p, err = cidrgen.Generate(cidrgen.Request{
-    Parent:          "10.0.0.0/24",
-    Allocated:       []string{"10.0.0.0/28"},
-    Classification:  "datanode",
-    Classifications: classes,
+g, err = cidrgen.New("10.0.0.0/24", classes)
+p, err = g.Generate(cidrgen.Request{
+    Allocated:      []string{"10.0.0.0/28"},
+    Classification: "datanode",
 })
 // p == 10.0.0.16/28
 ```
@@ -42,12 +41,14 @@ classifications:
 ```go
 f, _ := os.Open("classifications.yaml")
 classes, err := cidrgen.LoadClassifications(f)
+g, err := cidrgen.New("10.0.0.0/16", classes)
 ```
 
 ## Behavior
 
-- **Stateless.** Re-supply `Allocated` on every call; append each result before
-  requesting the next block.
+- **Immutable after `New`.** The parent and classification map are fixed at
+  construction; a `Generator` is safe for concurrent use. Re-supply `Allocated`
+  on every call; append each result before requesting the next block.
 - **IPv4 only.**
 - CIDR strings with host bits set (`10.0.0.5/24`) are accepted and canonicalized.
 - First-fit: the returned block is the lowest-address aligned gap that fits.

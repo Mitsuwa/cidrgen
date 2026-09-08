@@ -57,11 +57,11 @@ func TestLoadClassificationsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadClassifications: %v", err)
 	}
-	got, err := Generate(Request{
-		Parent:          "10.0.0.0/24",
-		Classification:  "datanode",
-		Classifications: m,
-	})
+	g, err := New("10.0.0.0/24", m)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got, err := g.Generate(Request{Classification: "datanode"})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}

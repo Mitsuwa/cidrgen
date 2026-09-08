@@ -11,21 +11,23 @@ single Go package (`github.com/Mitsuwa/cidrgen2`), no CLI, no subpackages.
    adds or extends table-driven tests covering that change in the same PR. A PR
    that only refactors keeps coverage at least where it was.
 3. **Allocation tests assert the invariant.** Every test that exercises
-   `Generate` or `firstFit` on a success path calls `assertFits` (or an
-   equivalent check): the returned prefix is inside the parent, aligned to its
-   own size, and overlaps nothing in the input.
+   `Generator.Generate` or `firstFit` on a success path calls `assertFits` (or
+   an equivalent check): the returned prefix is inside the parent, aligned to
+   its own size, and overlaps nothing in the input.
 
 ## Design constraints (do not drift from these)
 
-- **Stateless.** No package-level state, no mutation of inputs. Callers re-supply
-  `Request.Allocated` every call.
+- **Immutable after construction.** No package-level state, no mutation of
+  inputs. The parent pool and classification map are fixed at `New`; the
+  `Generator` is never mutated afterward and concurrent `Generate` calls are
+  safe. Callers re-supply `Request.Allocated` every call.
 - **`net/netip` for parsing/validation, `uint32` for address math.** IPv4 only.
 - **Inputs are CIDR strings**, parsed inside the package and canonicalized with
   `netip.Prefix.Masked()` (host bits set are tolerated, not rejected). The
   return value is a `netip.Prefix`.
 - **Size resolution:** `Request.Netmask` wins when non-zero; otherwise
-  `Request.Classification` is looked up in `Request.Classifications`. Neither set
-  is `ErrNoSizeSpecified`.
+  `Request.Classification` is looked up in the classification map passed to
+  `New`. Neither set is `ErrNoSizeSpecified`.
 - **Allocation strategy:** first-fit, lowest address, correctly aligned.
 - **Errors** are the sentinels in `errors.go`, wrapped with `fmt.Errorf("%w", …)`
   and matched by callers with `errors.Is`. Do not return bare `errors.New`
@@ -35,7 +37,7 @@ single Go package (`github.com/Mitsuwa/cidrgen2`), no CLI, no subpackages.
 
 | File | Responsibility |
 |---|---|
-| `cidrgen.go` | `Request`, `Generate`, `resolveBits` |
+| `cidrgen.go` | `Request`, `Generator`, `New`, `Generate`, `resolveBits` |
 | `parse.go` | string → `netip.Prefix`, normalization, `uint32` helpers |
 | `validate.go` | containment + overlap checks, sorting |
 | `allocate.go` | first-fit scan |

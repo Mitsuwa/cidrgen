@@ -6,65 +6,91 @@ import "github.com/Mitsuwa/cidrgen2"
 
 Package `cidrgen`. IPv4 only.
 
-## `Request`
+## `New`
 
 ```go
-type Request struct {
-    Parent          string         // pool to allocate within, e.g. "10.0.0.0/16" — required
-    Allocated       []string       // CIDRs already carved from Parent
-    Netmask         int             // prefix length for the new CIDR; wins when non-zero
-    Classification  string          // used when Netmask == 0
-    Classifications map[string]int  // classification name -> prefix length
+func New(parent string, classifications map[string]int) (*Generator, error)
+```
+
+Builds a [`Generator`](#generator) bound to a parent pool and a classification
+map.
+
+- **`parent`** — any IPv4 CIDR string, e.g. `"10.0.0.0/16"`. Host bits set are
+  tolerated (`10.0.0.9/16` is treated as `10.0.0.0/16`). Parsed and
+  canonicalized now; an unparseable or non-IPv4 string is `ErrInvalidPrefix`.
+- **`classifications`** — maps a classification name to a prefix length,
+  typically from [`LoadClassifications`](#loadclassifications). May be `nil` when
+  callers only ever request an explicit `Netmask`. `New` copies the map, so
+  mutating it afterward does not affect the `Generator`. Values are not
+  range-checked here — a length that cannot sit inside `parent` surfaces from
+  `Generate` as `ErrInvalidPrefix`.
+
+```go
+g, err := cidrgen.New("10.0.0.0/16", nil)
+```
+
+## `Generator`
+
+```go
+type Generator struct {
+    // unexported
 }
 ```
 
-- **`Parent`** — any IPv4 CIDR string. Host bits set are tolerated
-  (`10.0.0.9/16` is treated as `10.0.0.0/16`).
-- **`Allocated`** — each entry must be a valid IPv4 CIDR, fully inside `Parent`,
-  and non-overlapping with the others. Host bits set are tolerated. Order does
-  not matter. `nil` / empty means the whole parent is free.
-- **`Netmask`** — the requested prefix length, e.g. `24`. Must be strictly longer
-  than the parent's prefix and no greater than `32`. `0` means "not set — use
-  `Classification`".
-- **`Classification`** — a key into `Classifications`. Consulted only when
-  `Netmask == 0`.
-- **`Classifications`** — the lookup table, typically from
-  [`LoadClassifications`](#loadclassifications). Only needed when using
-  `Classification`.
+Immutable after `New`. Safe for concurrent use by multiple goroutines, as long
+as each call passes its own `Request`.
 
-## `Generate`
+### `Generate`
 
 ```go
-func Generate(req Request) (netip.Prefix, error)
+func (g *Generator) Generate(req Request) (netip.Prefix, error)
 ```
 
 Returns the lowest-address, correctly-aligned CIDR of the requested size that
-fits within `req.Parent` without overlapping any entry in `req.Allocated`.
+fits within `g`'s parent without overlapping any entry in `req.Allocated`.
 
-Resolution order for the size: `req.Netmask` if non-zero, else
-`req.Classifications[req.Classification]`, else `ErrNoSizeSpecified`.
+Resolution order for the size: `req.Netmask` if non-zero, else the classification
+map entry for `req.Classification`, else `ErrNoSizeSpecified`.
 
 The result is a canonical `netip.Prefix`; call `.String()` for text.
 
 ```go
-p, err := cidrgen.Generate(cidrgen.Request{
-    Parent:    "10.0.0.0/16",
+g, _ := cidrgen.New("10.0.0.0/16", nil)
+p, err := g.Generate(cidrgen.Request{
     Allocated: []string{"10.0.0.0/24", "10.0.2.0/24"},
     Netmask:   24,
 })
 // p.String() == "10.0.1.0/24"
 ```
 
+## `Request`
+
+```go
+type Request struct {
+    Allocated      []string // CIDRs already carved from the parent
+    Netmask        int      // prefix length for the new CIDR; wins when non-zero
+    Classification string   // classification name; used when Netmask == 0
+}
+```
+
+- **`Allocated`** — each entry must be a valid IPv4 CIDR, fully inside the
+  `Generator`'s parent, and non-overlapping with the others. Host bits set are
+  tolerated. Order does not matter. `nil` / empty means the whole parent is free.
+- **`Netmask`** — the requested prefix length, e.g. `24`. Must be strictly longer
+  than the parent's prefix and no greater than `32`. `0` means "not set — use
+  `Classification`".
+- **`Classification`** — a key into the map passed to `New`. Consulted only when
+  `Netmask == 0`. An unknown key (or a `nil` map) is `ErrUnknownClassification`.
+
 ### Allocating several blocks
 
 `Generate` returns one block. Thread each result back into `Allocated`:
 
 ```go
+g, _ := cidrgen.New("10.0.0.0/16", nil)
 allocated := []string{"10.0.0.0/24"}
 for i := 0; i < 3; i++ {
-    p, err := cidrgen.Generate(cidrgen.Request{
-        Parent: "10.0.0.0/16", Allocated: allocated, Netmask: 24,
-    })
+    p, err := g.Generate(cidrgen.Request{Allocated: allocated, Netmask: 24})
     if err != nil {
         break
     }
@@ -79,7 +105,8 @@ for i := 0; i < 3; i++ {
 func LoadClassifications(r io.Reader) (map[string]int, error)
 ```
 
-Parses a YAML document into a map suitable for `Request.Classifications`:
+Parses a YAML document into a map suitable for the `classifications` argument of
+[`New`](#new):
 
 ```yaml
 classifications:
@@ -91,6 +118,7 @@ classifications:
 f, err := os.Open("classifications.yaml")
 // ...
 classes, err := cidrgen.LoadClassifications(f)
+g, err := cidrgen.New("10.0.0.0/16", classes)
 ```
 
 Errors on: an empty document, a `classifications` key that is empty or `null`, a
@@ -101,20 +129,20 @@ non-integer value, or a prefix length outside `0..32`. See
 ## Errors
 
 All errors returned by this package match one of these sentinels with
-`errors.Is`. `Generate` wraps them with context via `fmt.Errorf("%w", …)`;
-`LoadClassifications` returns its own descriptive errors.
+`errors.Is`. `New` and `Generate` wrap them with context via
+`fmt.Errorf("%w", …)`; `LoadClassifications` returns its own descriptive errors.
 
 | Sentinel | Condition |
 |---|---|
 | `ErrNoSizeSpecified` | `Request` supplies neither `Netmask` nor `Classification` |
-| `ErrUnknownClassification` | `Classification` is not a key in `Classifications` (a `nil` map counts) |
+| `ErrUnknownClassification` | `Classification` is not a key in the map passed to `New` (a `nil` map counts) |
 | `ErrOverlappingInput` | two `Allocated` entries overlap each other |
-| `ErrOutOfParent` | an `Allocated` entry is not fully contained in `Parent` |
-| `ErrInvalidPrefix` | unparseable / non-IPv4 CIDR string, or a requested prefix not strictly inside the parent and within `1..32` |
-| `ErrNoSpace` | no free aligned block of the requested size fits within `Parent` |
+| `ErrOutOfParent` | an `Allocated` entry is not fully contained in the parent |
+| `ErrInvalidPrefix` | unparseable / non-IPv4 CIDR string (parent or allocated), or a requested prefix not strictly inside the parent and within `1..32` |
+| `ErrNoSpace` | no free aligned block of the requested size fits within the parent |
 
 ```go
-_, err := cidrgen.Generate(req)
+_, err := g.Generate(req)
 switch {
 case errors.Is(err, cidrgen.ErrNoSpace):
     // pool is full for this size

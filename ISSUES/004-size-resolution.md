@@ -1,5 +1,10 @@
 # 004 — Size resolution: netmask and classification
 
+> **Superseded in part by [007](007-generator-type.md):** `resolveBits` is now a
+> method `(g *Generator) resolveBits(req Request) (int, error)` — it reads the
+> parent bits and classification map from the `Generator` rather than taking them
+> as arguments. It stays pure (no I/O, no parsing).
+
 ## Context
 
 The requested block size comes from one of two places, and the precedence and

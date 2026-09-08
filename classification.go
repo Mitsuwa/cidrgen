@@ -9,7 +9,8 @@ import (
 )
 
 // LoadClassifications parses a YAML document mapping classification names to
-// prefix lengths and returns it as a map suitable for Request.Classifications:
+// prefix lengths and returns it as a map suitable for the classifications
+// argument of [New]:
 //
 //	classifications:
 //	  datanode: 28

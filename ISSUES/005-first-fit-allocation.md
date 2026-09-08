@@ -1,5 +1,9 @@
 # 005 — First-fit allocation
 
+> **Superseded in part by [007](007-generator-type.md):** `Generate` is now a
+> method on `*Generator`; the parent is parsed in `New`, not per call. `firstFit`
+> and the `parse → resolve → validate → allocate` pipeline are unchanged.
+
 ## Context
 
 The core: given the validated, sorted allocations and a target prefix length,

@@ -1,5 +1,9 @@
 # 002 — Domain types, parsing, normalization
 
+> **Superseded in part by [007](007-generator-type.md):** `Request` no longer
+> carries `Parent` or `Classifications` — those move to `New`. `Request` is
+> `Allocated`, `Netmask`, `Classification`.
+
 ## Context
 
 The package boundary takes CIDR strings and works internally in `net/netip` plus

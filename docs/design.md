@@ -19,8 +19,9 @@ without an API break, but no IPv6 code paths exist today.
 ### Bounded parent pool, passed explicitly
 
 Finding a "non-overlapping" CIDR only has meaning inside a boundary. `cidrgen`
-takes that boundary as an explicit `Request.Parent`. `Request.Allocated` are the
-sub-blocks already taken from it.
+takes that boundary as an explicit argument to `New`, which builds a `Generator`
+bound to that parent. `Request.Allocated` are the sub-blocks already taken from
+it, supplied per call.
 
 The rejected alternative was to search all of `0.0.0.0/0` minus reserved ranges
 and treat the input list purely as "occupied" space — that hands back public
@@ -41,19 +42,29 @@ exact. Ranges are carried as `uint64` so that the end of `0.0.0.0/0`, and
 "one past the top of the space" during the scan, do not overflow. `net.IPNet`
 was rejected: byte-slice fields, not comparable, not `sort`-friendly, allocates.
 
-### Stateless
+### Immutable after construction
 
-`Generate` is a pure function. The caller re-supplies the full `Allocated` list
-on every call and appends each result before asking for the next block. There is
-no `Allocator` object, no internal mutation, no concurrency story to get wrong.
-This keeps the core trivially testable and the behavior fully determined by the
-arguments.
+`New` takes the two inputs that are fixed for a caller — the parent pool and the
+classification map — parses and copies them, and returns a `*Generator` that is
+never mutated afterward. Everything that varies between calls lives in `Request`,
+which the caller re-supplies in full every time (`Allocated` especially: the
+package keeps no running list). `Generate` mutates nothing.
+
+Because the `Generator` is immutable, concurrent `Generate` calls on one
+`Generator` are safe, as long as each call passes its own `Request`.
+
+An earlier revision made `Generate` a bare package-level function with the parent
+in `Request`. Moving the parent to `New` parses and validates it once instead of
+on every call, shrinks `Request` to the fields that actually change, and lets the
+concurrency guarantee be stated rather than merely "not a problem". The core
+stays trivially testable — behavior is still fully determined by `New`'s
+arguments plus the `Request`.
 
 ### Explicit size wins over classification
 
 `Request.Netmask`, when non-zero, always determines the size. Only when it is
-zero is `Request.Classification` looked up in `Request.Classifications`. Supplying
-neither is an error (`ErrNoSizeSpecified`). See
+zero is `Request.Classification` looked up in the classification map passed to
+`New`. Supplying neither is an error (`ErrNoSizeSpecified`). See
 [classifications.md](classifications.md).
 
 ### First-fit, lowest address
@@ -64,11 +75,11 @@ Best-fit / lowest-fragmentation strategies were considered out of scope for v1.
 
 ### Lenient input, canonical output
 
-`Parent` and every `Allocated` entry are run through `netip.Prefix.Masked()`
-before use, so `10.0.0.5/24` is accepted and treated as `10.0.0.0/24`. What is
-*not* tolerated: entries outside the parent (`ErrOutOfParent`) and entries that
-overlap each other (`ErrOverlappingInput`) — those are caller mistakes worth
-surfacing rather than silently working around.
+The parent (in `New`) and every `Allocated` entry are run through
+`netip.Prefix.Masked()` before use, so `10.0.0.5/24` is accepted and treated as
+`10.0.0.0/24`. What is *not* tolerated: entries outside the parent
+(`ErrOutOfParent`) and entries that overlap each other (`ErrOverlappingInput`) —
+those are caller mistakes worth surfacing rather than silently working around.
 
 ### Sentinel errors
 

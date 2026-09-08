@@ -5,7 +5,7 @@
 | File | Responsibility |
 |---|---|
 | `doc.go` | package doc comment |
-| `cidrgen.go` | `Request`, `Generate`, `resolveBits` |
+| `cidrgen.go` | `Request`, `Generator`, `New`, `Generate`, `resolveBits` |
 | `parse.go` | CIDR string → `netip.Prefix`, normalization, `uint32` helpers |
 | `validate.go` | containment + overlap checks, sorting |
 | `allocate.go` | first-fit scan |
@@ -41,7 +41,8 @@ From [CLAUDE.md](../CLAUDE.md):
 
 ## Design constraints (do not drift)
 
-- Stateless: no package-level state, no input mutation.
+- Immutable after construction: no package-level state, no input mutation; the
+  `Generator` is fixed after `New` and safe for concurrent `Generate` calls.
 - `net/netip` for parsing/validation, `uint32` for address math, IPv4 only.
 - Inputs are CIDR strings, canonicalized with `Masked()`; output is a
   `netip.Prefix`.
@@ -71,6 +72,7 @@ Go version comes from `go.mod` (`go-version-file`).
 
 ## Roadmap
 
-`ISSUES/001`–`006` describe the intended incremental path (scaffold → types →
-validation → size resolution → allocation → YAML loader), each with an explicit
-test deliverable. `ISSUES/README.md` has the dependency order.
+`ISSUES/001`–`007` describe the intended incremental path (scaffold → types →
+validation → size resolution → allocation → YAML loader → `Generator` type),
+each with an explicit test deliverable. `ISSUES/README.md` has the dependency
+order.

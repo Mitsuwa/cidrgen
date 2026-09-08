@@ -1,10 +1,17 @@
 # Allocation algorithm
 
-`Generate` runs four stages: **parse → resolve size → validate → allocate**.
+The parent pool is parsed once in `New`. Each `Generate` call then runs four
+stages: **parse → resolve size → validate → allocate**.
 
-## 1. Parse (`parse.go`)
+## 0. Parse the parent (`New` in `cidrgen.go`)
 
-`Parent` and every `Allocated` string is run through `parsePrefix`:
+`New` runs the `parent` string through `parsePrefix` and stores the canonical
+`netip.Prefix` on the `Generator`. A bad parent is `ErrInvalidPrefix` returned
+from `New`, not `Generate`.
+
+## 1. Parse the request (`parse.go`)
+
+Every `Allocated` string is run through `parsePrefix`:
 
 - `netip.ParsePrefix` — rejects bad syntax and `/33`+ automatically.
 - non-IPv4 (including IPv4-mapped IPv6) is rejected.
@@ -19,9 +26,10 @@ Helpers:
   covers. Returned as `uint64` so `0.0.0.0/0` (end `0xFFFFFFFF`) and arithmetic
   that steps one past the top of the space during the scan cannot overflow.
 
-## 2. Resolve size (`resolveBits` in `cidrgen.go`)
+## 2. Resolve size (`(*Generator).resolveBits` in `cidrgen.go`)
 
-`Netmask != 0` → use it. Else look up `Classification`. Else `ErrNoSizeSpecified`.
+`Netmask != 0` → use it. Else look up `Classification` in the Generator's map.
+Else `ErrNoSizeSpecified`.
 The result `bits` must satisfy `parentBits < bits <= 32`, otherwise
 `ErrInvalidPrefix`. A negative `Netmask` falls through to this range check and so
 also yields `ErrInvalidPrefix`. See [classifications.md](classifications.md).

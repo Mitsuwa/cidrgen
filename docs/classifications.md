@@ -6,13 +6,15 @@ A request's block size comes from one of two inputs.
 
 1. **`Request.Netmask`** — if non-zero, this is the prefix length. It always
    wins, even when a classification is also given.
-2. **`Request.Classification`** — otherwise, this name is looked up in
-   `Request.Classifications`. A missing key (or a `nil` map) is
+2. **`Request.Classification`** — otherwise, this name is looked up in the
+   classification map passed to `New`. A missing key (or a `nil` map) is
    `ErrUnknownClassification`.
 3. **Neither** — `ErrNoSizeSpecified`.
 
 The resolved length must be strictly longer than the parent's prefix and no
 greater than `32`, otherwise `ErrInvalidPrefix`.
+
+`Classifications` below is the map passed to `New`.
 
 | `Netmask` | `Classification` | `Classifications` | Result |
 |---|---|---|---|
@@ -48,11 +50,12 @@ defer f.Close()
 classes, err := cidrgen.LoadClassifications(f)
 if err != nil { /* ... */ }
 
-p, err := cidrgen.Generate(cidrgen.Request{
-    Parent:          "10.0.0.0/24",
-    Allocated:       []string{"10.0.0.0/28"},
-    Classification:  "datanode",
-    Classifications: classes,
+g, err := cidrgen.New("10.0.0.0/24", classes)
+if err != nil { /* ... */ }
+
+p, err := g.Generate(cidrgen.Request{
+    Allocated:      []string{"10.0.0.0/28"},
+    Classification: "datanode",
 })
 // p.String() == "10.0.0.16/28"
 ```
