@@ -152,7 +152,7 @@ func TestResolveBits(t *testing.T) {
 }
 
 func TestGenerate(t *testing.T) {
-	classes := map[string]int{"datanode": 28}
+	classes := map[string]int{"datanode": 28, "computenode": 27}
 
 	tests := []struct {
 		name    string
@@ -170,6 +170,94 @@ func TestGenerate(t *testing.T) {
 				Netmask:   24,
 			},
 			want: "10.0.1.0/24",
+		},
+		{
+			name:   "empty pool returns the lowest block",
+			parent: "10.0.0.0/16",
+			req:    Request{Netmask: 24},
+			want:   "10.0.0.0/24",
+		},
+		{
+			name:   "re-aligns past a smaller allocation",
+			parent: "10.0.0.0/16",
+			req: Request{
+				Allocated: []string{"10.0.0.0/26"},
+				Netmask:   24,
+			},
+			want: "10.0.1.0/24",
+		},
+		{
+			name:   "smaller request slots into a sub-block gap",
+			parent: "10.0.0.0/24",
+			req: Request{
+				Allocated: []string{"10.0.0.0/26", "10.0.0.128/26"},
+				Netmask:   26,
+			},
+			want: "10.0.0.64/26",
+		},
+		{
+			name:   "exact fit in the last slot",
+			parent: "10.0.0.0/24",
+			req: Request{
+				Allocated: []string{"10.0.0.0/25"},
+				Netmask:   25,
+			},
+			want: "10.0.0.128/25",
+		},
+		{
+			name:   "unsorted allocated input is handled",
+			parent: "10.0.0.0/16",
+			req: Request{
+				Allocated: []string{"10.0.3.0/24", "10.0.0.0/24", "10.0.1.0/24"},
+				Netmask:   24,
+			},
+			want: "10.0.2.0/24",
+		},
+		{
+			name:   "request larger than an existing allocation",
+			parent: "10.0.0.0/16",
+			req: Request{
+				Allocated: []string{"10.0.0.0/24"},
+				Netmask:   23,
+			},
+			want: "10.0.2.0/23",
+		},
+		{
+			name:   "fits between two /27 allocations",
+			parent: "10.0.0.0/24",
+			req: Request{
+				Allocated: []string{"10.0.0.0/27", "10.0.0.64/27"},
+				Netmask:   27,
+			},
+			want: "10.0.0.32/27",
+		},
+		{
+			name:   "consecutive single-host allocations",
+			parent: "10.0.0.0/30",
+			req: Request{
+				Allocated: []string{"10.0.0.0/32", "10.0.0.1/32"},
+				Netmask:   32,
+			},
+			want: "10.0.0.2/32",
+		},
+		{
+			name:   "top of the address space",
+			parent: "255.255.255.0/24",
+			req: Request{
+				Allocated: []string{"255.255.255.0/25"},
+				Netmask:   25,
+			},
+			want: "255.255.255.128/25",
+		},
+		{
+			name:    "classification block re-aligns past a smaller allocation",
+			parent:  "10.0.0.0/24",
+			classes: classes,
+			req: Request{
+				Allocated:      []string{"10.0.0.0/28"},
+				Classification: "computenode",
+			},
+			want: "10.0.0.32/27",
 		},
 		{
 			name:    "classification-sized block",
