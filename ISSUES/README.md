@@ -13,3 +13,4 @@ per [CLAUDE.md](../CLAUDE.md) a PR does not merge without it.
 | 005 | First-fit allocation | 003, 004 |
 | 006 | LoadClassifications YAML helper | 004 |
 | 007 | `Generator` type: parent and classifications at construction | 005, 006 |
+| 008 | Mixed-size sequential allocation: order tests | 007 |
