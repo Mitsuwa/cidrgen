@@ -8,7 +8,7 @@ PR is enforced from day one.
 
 ## Tasks
 
-- [ ] `go.mod`: `module github.com/Mitsuwa/cidrgen2`, `go 1.27`, `gopkg.in/yaml.v3`.
+- [ ] `go.mod`: `module github.com/Mitsuwa/cidrgen`, `go 1.27`, `gopkg.in/yaml.v3`.
 - [ ] `doc.go`: package doc comment for `cidrgen`.
 - [ ] `CLAUDE.md`: the test-first / tests-with-every-PR rule and the design
       constraints.

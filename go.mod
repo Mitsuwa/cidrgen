@@ -1,4 +1,4 @@
-module github.com/Mitsuwa/cidrgen2
+module github.com/Mitsuwa/cidrgen
 
 go 1.27
 

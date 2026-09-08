@@ -8,7 +8,7 @@ requested size. The size is given directly as a prefix length, or indirectly
 through a *classification* name that maps to one.
 
 ```go
-import "github.com/Mitsuwa/cidrgen2"
+import "github.com/Mitsuwa/cidrgen"
 
 // Explicit size.
 g, err := cidrgen.New("10.0.0.0/16", nil)
