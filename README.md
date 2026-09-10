@@ -2,6 +2,9 @@
 
 Generate non-overlapping IPv4 CIDR blocks from a parent superset and previously allocated CIDR list.
 
+> **API not yet stable.** `cidrgen` is at `v0.x`; the exported API may change in
+> any release. See [docs/releasing.md](docs/releasing.md).
+
 ## How
 
 Create a `Generator` for a parent CIDR, then, given the blocks already carved out
@@ -74,6 +77,7 @@ All errors match one of the package sentinels with `errors.Is`:
 | [docs/algorithm.md](docs/algorithm.md) | How first-fit allocation works |
 | [docs/classifications.md](docs/classifications.md) | Classification YAML and size resolution |
 | [docs/development.md](docs/development.md) | Local workflow and CI |
+| [docs/releasing.md](docs/releasing.md) | How a version is tagged and released |
 
 ## Development
 

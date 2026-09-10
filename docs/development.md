@@ -66,13 +66,18 @@ From [CLAUDE.md](../CLAUDE.md):
 
 ## CI
 
-`.github/workflows/test.yml`, on push to `main` and all PRs:
+`.github/workflows/test.yml`, on every pull request:
 
 1. `go mod tidy` then `git diff --exit-code -- go.mod go.sum` — modules stay tidy.
 2. `go vet ./...`
 3. `go test ./... -race -count=1 -covermode=atomic`
 
 Go version comes from `go.mod` (`go-version-file`).
+
+`.github/workflows/release.yml` is the authoritative run for `main`: on every
+push it re-runs `go vet` and `go test ./... -race`, then tags `v<VERSION>` and
+cuts a GitHub Release if that tag does not already exist. See
+[releasing.md](releasing.md).
 
 ## Roadmap
 
