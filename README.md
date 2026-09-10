@@ -1,6 +1,8 @@
 # cidrgen
 
-Allocate non-overlapping IPv4 CIDR blocks from a parent pool.
+Generate non-overlapping IPv4 CIDR blocks from a parent superset based off a previously allocated CIDR list.
+
+## How
 
 Create a `Generator` for a parent CIDR, then, given the blocks already carved out
 of it, `Generate` returns the lowest-address, correctly-aligned free block of a
@@ -16,6 +18,8 @@ p, err := g.Generate(cidrgen.Request{
     Allocated: []string{"10.0.0.0/24", "10.0.2.0/24"},
     Netmask:   24,
 })
+
+// will generate
 // p == 10.0.1.0/24
 
 // Size by classification.
@@ -25,6 +29,8 @@ p, err = g.Generate(cidrgen.Request{
     Allocated:      []string{"10.0.0.0/28"},
     Classification: "datanode",
 })
+
+// will generate
 // p == 10.0.0.16/28
 ```
 
