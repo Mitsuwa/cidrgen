@@ -9,6 +9,7 @@
 | [algorithm.md](algorithm.md) | How first-fit allocation works: alignment, the scan, `uint32` arithmetic |
 | [classifications.md](classifications.md) | The classification YAML format and how a request's size is resolved |
 | [development.md](development.md) | Local workflow, the test-first rule, CI |
+| [releasing.md](releasing.md) | How `VERSION` becomes a tag and a pkg.go.dev release |
 
 Start with [design.md](design.md) for the mental model, then [api.md](api.md) to use it.
 

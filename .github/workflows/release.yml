@@ -1,0 +1,84 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -race -count=1
+
+      - name: Resolve and validate version
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION file is not MAJOR.MINOR.PATCH semver: '$VERSION'" >&2
+            exit 1
+          fi
+          TAG="v$VERSION"
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists; nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LATEST="$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)"
+          if [ -n "$LATEST" ]; then
+            HIGHEST="$(printf '%s\n%s\n' "$LATEST" "$TAG" | sort -V | tail -n1)"
+            if [ "$HIGHEST" != "$TAG" ] || [ "$LATEST" = "$TAG" ]; then
+              echo "VERSION $TAG does not sort above the latest tag $LATEST" >&2
+              exit 1
+            fi
+          fi
+
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" --title "$TAG" --generate-notes
+
+      - name: Prompt module proxy and pkg.go.dev
+        if: steps.version.outputs.release == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # The proxy protocol case-encodes uppercase letters in the module path
+          # as '!' followed by the lowercase letter: Mitsuwa -> !mitsuwa.
+          curl -fsS 'https://proxy.golang.org/github.com/!mitsuwa/cidrgen/@v/'"${TAG}"'.info'
+          curl -fsS -o /dev/null "https://pkg.go.dev/github.com/Mitsuwa/cidrgen@${TAG}" || true

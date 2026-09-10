@@ -43,7 +43,8 @@ single Go package (`github.com/Mitsuwa/cidrgen`), no CLI, no subpackages.
 | `allocate.go` | first-fit scan |
 | `classification.go` | `LoadClassifications` YAML helper |
 | `errors.go` | sentinel errors |
-| `docs/` | design, API, algorithm, classification, and development docs |
+| `docs/` | design, API, algorithm, classification, development, and release docs |
+| `VERSION` | current version (bare semver); merging a bump to `main` tags it |
 | `ISSUES/` | ordered, test-first PR breakdown |
 
 When behavior or design constraints change, update the relevant file in `docs/`
