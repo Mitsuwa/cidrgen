@@ -1,6 +1,6 @@
 # cidrgen
 
-Generate non-overlapping IPv4 CIDR blocks from a parent superset based off a previously allocated CIDR list.
+Generate non-overlapping IPv4 CIDR blocks from a parent superset and previously allocated CIDR list.
 
 ## How
 
